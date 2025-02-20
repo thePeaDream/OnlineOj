@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/time.h>
 namespace ns_util
 {
     const std::string temp_path = "./temp/";
@@ -36,7 +37,7 @@ namespace ns_util
             return AddSuffix(file_name,".stderr");
         }
     };
-    //文件工具
+    //文件工具类
     class FileUtil
     {
     public:
@@ -50,6 +51,18 @@ namespace ns_util
             if(ret == 0) return true;
             return false;
         }
-
+    };
+    //时间工具类
+    class TimeUtil
+    {
+    public:
+        static std::string GetTimeStamp()
+        {
+            // int gettimeofday(struct timeval* tv,struct timezone *tz//时区设置为nullptr)
+            //tv:输出型参数
+            struct timeval tv;
+            gettimeofday(&tv,nullptr);
+            return std::to_string(tv.tv_sec);
+        }
     };
 }
