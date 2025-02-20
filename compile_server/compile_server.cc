@@ -1,1 +1,14 @@
-//使用compile_run.hpp提供的方法和类，完成基于网络请求式的编译并运行这样的服务
+#include "compiler.hpp"
+using namespace ns_compiler;
+//测试编译功能
+void testCompile()
+{
+    std::string code = "code";
+    Compiler::Compile(code);
+}
+
+int main()
+{
+    testCompile();
+    return 0;
+}

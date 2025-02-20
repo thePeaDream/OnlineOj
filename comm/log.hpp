@@ -10,7 +10,7 @@ namespace ns_log
     enum{
         INFO,//常规   0
         DEBUG,//调试  1
-        WARING,//警告  2
+        WARNING,//警告  2
         ERROR,//当前用户的请求发生错误 3
         FATAL//系统级错误 4
     };
