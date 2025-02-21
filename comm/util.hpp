@@ -20,6 +20,8 @@ namespace ns_util
             path_name += suffix;
             return path_name;
         }
+
+        //编译时需要有的临时文件
         //构建源文件路径+后缀
         //1234 -> ./temp/1234.cpp
         static std::string Src(const std::string &file_name)
@@ -31,11 +33,27 @@ namespace ns_util
         {
             return AddSuffix(file_name,".exe");
         }
-        //构建该程序对应的标准错误完整的路径+后缀名
-        static std::string  Stderr(const std::string &file_name)
+        //编译时报错形成的文件
+        static std::string CompilerError(const std::string &file_name)
+        {
+            return AddSuffix(file_name,".compile_error");
+        }
+
+        //运行时需要的临时文件
+        static std::string Stdin(const std::string &file_name)
+        {
+            return AddSuffix(file_name,".stdin");
+        }
+        static std::string Stdout(const std::string &file_name)
+        {
+            return AddSuffix(file_name,".stdout");
+        }
+        //构建该程序对应的标准错误完整的路径+后缀名(运行时错误形成的文件)
+        static std::string Stderr(const std::string &file_name)
         {
             return AddSuffix(file_name,".stderr");
         }
+        
     };
     //文件工具类
     class FileUtil

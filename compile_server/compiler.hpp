@@ -29,10 +29,11 @@ namespace ns_compiler
             pid_t id = fork();
             if(id == 0)//子进程
             {
-                int _stderr = open(PathUtil::Stderr(file_name).c_str(),O_CREAT|O_WRONLY,0644); 
+                umask(0);
+                int _stderr = open(PathUtil::CompilerError(file_name).c_str(),O_CREAT|O_WRONLY,0644); 
                 if(_stderr < 0)
                 {
-                    LOG(WARNING) << "没有成功形成strerr文件"<<std::endl;
+                    LOG(WARNING) << "没有成功形成compile_error文件"<<std::endl;
                     exit(1);
                 }
                 //标准错误重定向到_stderr

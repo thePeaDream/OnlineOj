@@ -1,7 +1,7 @@
 #include <iostream>
 int main()
 {
-    1234
     std::cout << "hello" << std::endl;
+    std::cerr << "错误" << std::endl;
     return 0;
 }
