@@ -82,18 +82,16 @@ namespace ns_runner{
                 execl(PathUtil::Exe(file_name).c_str(),PathUtil::Exe(file_name).c_str(),nullptr);
                 exit(1);
             }
-            else if(id > 0)//父进程
-            {
-                close(stdin_fd);
-                close(stdout_fd);
-                close(stderr_fd);
-                int ret = 0;
-                waitpid(id,&ret,0);
-                //最后面7位代表收到的信号，0表示没有收到信号
-                LOG(INFO) << "运行完毕，info:" << (ret & 0x7f) << std::endl;
-                //通过判断信号，可以得知因为什么原因出错
-                return ret & 0x7f;
-            }
+            //父进程           
+            close(stdin_fd);
+            close(stdout_fd);
+            close(stderr_fd);
+            int ret = 0;
+            waitpid(id,&ret,0);
+            //最后面7位代表收到的信号，0表示没有收到信号
+            LOG(INFO) << "运行完毕，info:" << (ret & 0x7f) << std::endl;
+            //通过判断信号，可以得知因为什么原因出错
+            return ret & 0x7f;
         }
         //设置进程占用资源大小的接口
         static void SetProcLimit(int cpu_limit,int mem_limit)

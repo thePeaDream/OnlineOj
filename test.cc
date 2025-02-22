@@ -52,18 +52,21 @@
 //apt-get install libjsoncpp-dev
 int main()
 {
+    
     //序列化工作
     //将结构化的数据，转换成一个字符串
     //Value是一个Json的中间类，可以填充KV值
     Json::Value root;
     root["code"] = "mycode"; 
-    root["user"] = "lyh";
+    root["user"] = "李勇豪";
     root["age"] = "18";
 
     //用来进行序列化工作的类对象
     //Json::StyledWriter writer;
-    Json::FastWriter writer;
-    std::string str = writer.write(root);
+    //Json::FastWriter writer; 中文会乱码
+    Json::StreamWriterBuilder writer;
+    writer.settings_["emitUTF8"] = true;
+    std::string str = Json::writeString(writer,root);
     std::cout << str << "\n";
     return 0;
 }

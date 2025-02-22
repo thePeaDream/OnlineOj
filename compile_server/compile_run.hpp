@@ -14,12 +14,41 @@ namespace ns_compile_and_run
     class CompileAndRun
     {
     public:
-        //code > 0 就是信号
-        //code < 0 错误信息
+        //code > 0 进程收到信号导致进程退出/运行时报错
+        //code < 0 非运行的报错(代码为空/编译报错/内部错误)
         //code = 0 成功
-        static std::string CodeDesc(int code)
+        static std::string CodeDesc(int code,const std::string& file_name)
         {
-            return "";
+            std::string desc;
+            switch(code)
+            {
+            case 0:
+                desc = "编译运行成功";
+                break;
+            case -1:
+                desc = "代码为空";
+                break;
+            case -2:
+                desc = "未知错误/内部错误";
+                break;
+            case -3:
+                //desc = "编译发生错误";
+                FileUtil::ReadFile(PathUtil::CompilerError(file_name),&desc,true);
+                break;
+            case SIGABRT://6
+                desc = "空间复杂度过高";
+                break;
+            case SIGXCPU://24
+                desc = "时间复杂度过高";
+                break;
+            case SIGFPE://8
+                desc = "浮点数溢出/除0错误";
+                break;
+            default:
+                desc = "收到信号：" + std::to_string(code);
+                break;
+            }
+            return desc;
         }
         /*
         json字符串里的key
@@ -95,16 +124,25 @@ namespace ns_compile_and_run
             }
         END:
             out_value["status"] = status_code;
-            out_value["reason"] = CodeDesc(status_code);
+            out_value["reason"] = CodeDesc(status_code,file_name);
             if(status_code == 0)
             {
+                std::string std_out;
+                std::string std_err;
+                FileUtil::ReadFile(PathUtil::Stdout(file_name),&std_out,true);
+                FileUtil::ReadFile(PathUtil::Stderr(file_name),&std_err,true);
                 //整个过程全部成功，才需要填充stdout
-                out_value["stdout"] = FileUtil::ReadFile(PathUtil::Stdout(file_name));
-                out_value["stderr"] = FileUtil::ReadFile(PathUtil::Stderr(file_name));
+                out_value["stdout"] = std_out;
+                out_value["stderr"] = std_err;
             }
             //反序列化
-            Json::StyledWriter writer;
-            *out_json = writer.write(out_value);
+            Json::StreamWriterBuilder writer;
+            writer.settings_["emitUTF8"] = true;
+            *out_json = Json::writeString(writer,out_value);
+
+            //把结果全部拿到以后，清理所有相关临时文件
+            FileUtil::RemoveTempFile(file_name);
+
 
             // if(code.size() == 0)
             // {
@@ -149,5 +187,6 @@ namespace ns_compile_and_run
             //     out_value["reason"] = SignalDesc(retCode);//将信号转换成报错原因
             // }
         }
+
     };
 }

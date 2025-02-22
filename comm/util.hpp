@@ -1,13 +1,40 @@
 #pragma once
 #include <iostream>
 #include <string>
+#include <atomic>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <fstream>
+
 namespace ns_util
 {
     const std::string temp_path = "./temp/";
+    //时间工具类
+    class TimeUtil
+    {
+    public:
+        static std::string GetTimeStamp()
+        {
+            // int gettimeofday(struct timeval* tv,struct timezone *tz//时区设置为nullptr)
+            //tv:输出型参数
+            struct timeval tv;
+            gettimeofday(&tv,nullptr);
+            return std::to_string(tv.tv_sec);
+        }
+
+        //获取毫秒级别时间戳
+        static std::string GetTimeMs()
+        {
+            struct timeval tv;
+            //time_t tv_sec   //秒
+            //suseconds_t tv_usec  //微秒
+            gettimeofday(&tv,nullptr);
+            return std::to_string(tv.tv_usec / 1000 + tv.tv_sec * 1000);
+        }
+    };
+
     //路径拼接类工具
     class PathUtil
     {
@@ -71,35 +98,83 @@ namespace ns_util
         }
 
         //生成一个唯一的文件名,没有后缀和目录
+        //毫秒级时间戳+原子性递增唯一值：保证唯一性
         static std::string UniqFileName()
         {
-            return "";
+            //原子性递增的计数器
+            static std::atomic_uint id(0);
+            std::string ms = TimeUtil::GetTimeMs();
+            std::string uniq_id = std::to_string(id);
+            id++;
+            return ms + "xx" + uniq_id;
         }
         
         //把用户代码写到该文件中,形成临时src文件
-        static bool WriteFile(const std::string& path_name,const std::string& code)
+        static bool WriteFile(const std::string& path_name,const std::string& content)
         {
+            std::ofstream out(path_name);
+            if(!out.is_open())
+            {
+                return false;
+            }
+            out.write(content.c_str(),content.size());
+
+            out.close();
             return true;
         }
 
         //读取文件
-        static std::string ReadFile(const std::string& path_name)
+        static bool ReadFile(const std::string& path_name,std::string* content/*输出型参数*/,bool keep = false/*是否保留文件里的\n*/)
         {
+            (*content).clear();
+            std::ifstream in(path_name);
+            if(!in.is_open())
+            {
+                return false;
+            }
+            std::string line;
+            //getline不保存行分割符，读上来时会去掉\n，但有时候需要保留\n
+            //getline内部重载了强制类型转化
+            while(std::getline(in,line))
+            {
+                (*content) += line;
+                (*content) += (keep ? "\n":"");
+            }
+
+            in.close();
+            return true;
+        }
+
+        //删除所有与file_name相关的临时文件
+        static void RemoveTempFile(const std::string& file_name)
+        {
+            //清理文件的个数不确定
+            //逐个判断
+            std::string src = PathUtil::Src(file_name);
+            if(FileUtil::IsFileExists(src)) 
+                unlink(src.c_str());
             
+            std::string compiler_error = PathUtil::CompilerError(file_name);
+            if(FileUtil::IsFileExists(compiler_error)) 
+                unlink(compiler_error.c_str());
+
+            std::string execute = PathUtil::Exe(file_name);
+            if(FileUtil::IsFileExists(execute))
+                unlink(execute.c_str());
+            
+            std::string _stdin = PathUtil::Stdin(file_name);
+            if(FileUtil::IsFileExists(_stdin))
+                unlink(_stdin.c_str());
+
+            std::string _stdout = PathUtil::Stdout(file_name);
+            if(FileUtil::IsFileExists(_stdout))
+                unlink(_stdout.c_str());
+            
+            std::string _stderr = PathUtil::Stderr(file_name);
+            if(FileUtil::IsFileExists(_stderr))
+                unlink(_stderr.c_str());
         }
 
     };
-    //时间工具类
-    class TimeUtil
-    {
-    public:
-        static std::string GetTimeStamp()
-        {
-            // int gettimeofday(struct timeval* tv,struct timezone *tz//时区设置为nullptr)
-            //tv:输出型参数
-            struct timeval tv;
-            gettimeofday(&tv,nullptr);
-            return std::to_string(tv.tv_sec);
-        }
-    };
+    
 }
