@@ -592,11 +592,77 @@ static void RemoveTempFile(const std::string& file_name)
 
 #### 打包成网络服务
 
-```
-//接入cpp-httplib
+cpp-httplib使用实例：
+
+```c++
+//接入cpp-httplib:header-only 只需要将.h拷贝到项目中，即可直接使用
+//cpp-httplib:需要使用高版本的gcc/g++
+//gcc version 13.3.0 (Ubuntu 13.3.0-6ubuntu2~24.04) 
+//cpp-httplib:阻塞式多线程的一个网络http库,需要链接lpthread
+
+//快速上手
+int main()
+{
+    //提供的编译服务，打包形成一个网络服务
+    //cpp-httplib
+    Server svr;
+    svr.set_base_dir("./wwwroot");//设置首页仅测试
+    //http的get请求,匹配的是/hello,就会执行后面的表达式
+    svr.Get("/hello",[](const Request& req,Response &resp){
+        resp.set_content("hello,你好 httplib","text/plain;charset=utf-8");//设置响应内容 和 格式
+    });
+    svr.listen("0.0.0.0",8080);//启动http服务
+    return 0;
+}
 ```
 
+把编译运行功能打包成网络服务的compile_server.cc实现:
 
+```
+void Usage(std::string proc)
+{
+    std::cerr << "Usage: " << proc << " port" << std::endl; 
+}
+//compile_server可以被多个主机部署,在一台主机上也能部署多个,需要把端口号暴露出来，运行服务时，手动绑定端口号
+//./compile_server 端口号
+//例如：./compile_server 8080
+int main(int argc,char* argv[])
+{
+    if(argc != 2){
+        Usage(argv[0]);
+        return 1;
+    }
+    //提供的编译服务，打包形成一个网络服务
+    //cpp-httplib
+    Server svr;
+    //http的post请求
+    svr.Post("/compile_and_run",[](const Request& req,Response &resp)
+    {
+        //用户的请求正文是我们想要的json string
+        std::string in_json = req.body;
+        std::string out_json;
+        if(!in_json.empty())
+        {
+            CompileAndRun::Start(in_json,&out_json);
+            //将json格式的字符串响应给用户
+            resp.set_content(out_json,"application/json");
+        }
+    });
+    
+    svr.listen("0.0.0.0",atoi(argv[1]));//启动http服务
+    return 0;
+}
+```
+
+使用postman进行测试：
+
+在不同端口启动3个服务
+
+![image-20250222232929997](assets/image-20250222232929997.png)
+
+![image-20250222233732775](assets/image-20250222233732775.png)
+
+![image-20250222233822407](assets/image-20250222233822407.png)
 
 ### 其他：日志功能
 
