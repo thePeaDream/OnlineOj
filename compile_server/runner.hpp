@@ -5,6 +5,8 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 #include "../comm/util.hpp"
 #include "../comm/log.hpp"
 namespace ns_runner{
@@ -41,7 +43,7 @@ namespace ns_runner{
             int stderr_fd = open(PathUtil::Stderr(file_name).c_str(),O_CREAT|O_WRONLY,0644);
             if(stdin_fd < 0 || stdout_fd < 0 || stderr_fd < 0)
             {
-                LOG(ERROR) << "打开文件失败" << std::endl;
+                LOG(ERROR) << "运行时，打开标准文件失败" << std::endl;
                 return -1;
             }
             pid_t id = fork();
@@ -50,11 +52,23 @@ namespace ns_runner{
                 close(stdin_fd);
                 close(stdout_fd);
                 close(stderr_fd);
-                LOG(ERROR) << "创建子进程失败" << std::endl;
+                LOG(ERROR) << "运行时创建子进程失败" << std::endl;
                 return -2;
             }
             else if(id == 0)//子进程
             {
+                //int setrlimit(int resource,const struct rlimit* rlim)设置一个进程占用资源的上限
+                //第一个参数
+                //RLIMIT_AS:占的虚拟内存大小
+                //RLIMIT_CPU:占用的cpu时间
+                //第二个参数
+                /*
+                    struct rlimit{
+                        rlim_t rlim_cur;//约束占用资源的上限
+                        rlim_t rlim_max;//设置rlim_cur的最大值,默认无穷大
+                    };
+                */
+
                 //把程序运行的标准输入、输出、错误重定向到临时文件中
                 dup2(stdin_fd,0);
                 dup2(stdout_fd,1);
@@ -70,6 +84,7 @@ namespace ns_runner{
                 int ret = 0;
                 waitpid(id,&ret,0);
                 //最后面7位代表收到的信号，0表示没有收到信号
+                LOG(INFO) << "运行完毕，info:" << (ret & 0x7f) << std::endl;
                 return ret & 0x7f;
             }
         }

@@ -55,8 +55,7 @@ namespace ns_compiler
                 //就看对应的.exe文件是否存在即可
                 if(FileUtil::IsFileExists(PathUtil::Exe(file_name)))
                 {
-                    LOG(INFO) << PathUtil::Src(file_name)<<"\n";
-                    LOG(INFO) << "编译成功" << "\n";
+                    LOG(INFO) << PathUtil::Src(file_name)<<"编译成功"<<"\n";
                     return true;
                 }
                 LOG(INFO) << PathUtil::Src(file_name)<<"\n";
