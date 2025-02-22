@@ -69,6 +69,25 @@ namespace ns_util
             if(ret == 0) return true;
             return false;
         }
+
+        //生成一个唯一的文件名,没有后缀和目录
+        static std::string UniqFileName()
+        {
+            return "";
+        }
+        
+        //把用户代码写到该文件中,形成临时src文件
+        static bool WriteFile(const std::string& path_name,const std::string& code)
+        {
+            return true;
+        }
+
+        //读取文件
+        static std::string ReadFile(const std::string& path_name)
+        {
+            
+        }
+
     };
     //时间工具类
     class TimeUtil
