@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <fstream>
+#include <boost/algorithm/string.hpp>
 
 namespace ns_util
 {
@@ -174,7 +175,19 @@ namespace ns_util
             if(FileUtil::IsFileExists(_stderr))
                 unlink(_stderr.c_str());
         }
-
     };
     
+    class StringUtil
+    {
+    public:
+        /*
+            str:输入型参数，要切分的字符串
+            target:输出型参数，保存切分的结果
+            sep:分割符
+        */
+        static void SpiltString(const std::string& str,std::vector<std::string> *target,const std::string& sep)
+        {
+            boost::split(*target,str,boost::is_any_of(sep),boost::algorithm::token_compress_on);
+        }
+    };
 }
