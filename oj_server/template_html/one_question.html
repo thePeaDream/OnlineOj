@@ -3,13 +3,232 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{number}}@{{title}}</title>
+    <!--引入ace cdn的插件--> <!--cdn是用来网络加速的-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js" type="text/javascript" charset="UTF-8"></script>
+    <!--语言工具-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ext-language_tools.js" type="text/javascript" charset="UTF-8"></script>
+    <!-- 引入jquery -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" type="text/javascript" charset="UTF-8"></script>
+    <title>{{number}}.{{title}}</title>
+    <style>
+        /* 100%保证我们的样式设置可以不受默认影响 */
+        *{
+            /* 消除网页的默认外边距 */
+            margin:0px;
+            /* 消除网页的默认内边距 */
+            padding:0px;
+        }
+        html,
+        body{
+            width:100%;
+            height:100%;
+        }
+
+        .container .navbar{
+            width:100%;
+            height:50px;
+            background-color: black;
+            /* 给父级标签设置overflow,取消后续浮动带来的影响 */
+            overflow: hidden;
+        }
+        .container .navbar a{
+            /* 设置a标签是行内块元素，允许设置宽度 */
+            display: inline-block;
+            /* a标签默认是行内元素，无法设置宽度*/
+            width: 80px;
+            color: white;
+            font-size: large;
+            text-decoration: none;
+            text-align: center;
+            /* 设置文字的高度和导航栏一样高，使它上下居中 */
+            line-height: 50px;
+        }
+        /* 设置鼠标事件 */
+        .container .navbar a:hover{
+            background-color: red;
+        }
+
+        .container .navbar .login{
+            float: right;
+        }
+
+
+        .container .middle{
+            overflow: hidden;
+            width:100%;
+            height:800px;
+        }
+        .container .middle .left{
+            width: 40%;
+            height:800px;
+            float: left;
+            /* 添加滚动条 */
+            /* overflow: scroll; */
+            overflow:auto;
+        }
+        .container .middle .left h3{
+            margin-top:10px;
+            margin-left:10px;
+        }
+        .container .middle .left pre{
+            margin-top:10px;
+            margin-left:10px;
+            font-size:medium;
+        }
+
+        .container .middle .right{
+            width: 60%;
+            float: right;
+        }
+        .container .middle .right .ace_editor{
+            height: 800px;
+        }
+        
+        
+        .container .end{
+            overflow: hidden;
+            width:100%;
+        }
+        .container .end .result{
+            width:300px;
+            float: left;
+            margin-top:5px;
+            margin-left:5px;
+        }
+        .container .end .result pre{
+            font-size: large;
+        }
+        .container .end .bt{
+            width:100px;
+            height:50px;
+            font-size: large;
+            float: right;
+            background-color: #26bb9c;
+            color:white;
+            border:0px;
+            margin-top: 10px;
+            margin-right: 10px;
+        }
+        .container .end .bt:hover{
+            color:red;
+        }
+    </style>
 </head>
 <body>
-    <h3>{{number}}@{{title}}@{{star}}</h3>
-    <p>{{desc}}</p>
-    <!-- 文本编辑框 -->
-    <textarea name="code" id="" col="30" row="10">{{header}}</textarea>
+    <div class="container">
+        <!-- 导航栏 -->
+        <div class="navbar">
+            <a href="/">首页</a>
+            <a href="/all_questions">题库</a>
+            <a href="#">竞赛</a>
+            <a class="login" href="#">登录</a>
+        </div>
+        
+        <!-- 左右呈现： 题目描述  预制代码 -->
+        <div class = "middle">
+            <div class="left">
+                <h3><span id="number">{{number}}</span>.{{title}} {{star}}</h3>
+                <pre>{{desc}}</pre>
+            </div>
+            <div class="right">
+                    <!-- ace需要的标签 -->
+                    <pre id="code" class="ace_editor"><textarea class="ace_text-input">{{header}}</textarea></pre>
+            </div>
+        </div>
+
+        <!-- 提交且得到结果 -->
+        <div class="end">
+            <div class="result"> </div>
+            <button class="bt" onclick="submit()">运行代码</button>
+        </div>
+    </div>
+
+    <script>
+        editor = ace.edit("code");
+        //设置风格和语言
+        editor.setTheme("ace/theme/twilight");
+        editor.session.setMode("ace/mode/c_cpp");
+        //字体大小
+        editor.setFontSize(16);
+        //设置默认制表符的大小
+        editor.getSession().setTabSize(4);
+
+        //设置只读
+        editor.setReadOnly(false);
+
+        editor.setShowPrintMargin(false);
+
+        //启用提示菜单
+        ace.require("ace/ext/language_tools");
+        editor.setOptions(
+            {
+                enableBasicAutocompletion:true,
+                enableSnippets:true,
+                enableLiveAutocompletion:true
+            }
+        );
+
+        function submit()
+        {
+            // 1 收集要提交的数据：代码、题号
+            let code = editor.getSession().getValue();
+            // $就是个JQuery对象，传入选择器 选择 对应的标签，来获取对应标签的信息
+            let number = $(".container .middle .left h3 #number").text();
+            //console.log(code);
+            //console.log(number);
+            //形成url
+            let url = "/judge/" + number;
+            // 2 构建json,用ajax向后台发起基于http的json请求
+            $.ajax({
+                method:'Post', // 请求方式
+                url:url,  //指定url
+                dataType:'json', //告诉服务器，需要响应给客户端json数据
+                contentType:"application/json;charset=utf-8",//告诉服务器，发送的数据是什么格式
+                data: JSON.stringify({
+                    'code':code,
+                    'input':''
+                }),
+                success: function(data){
+                    //成功获得响应
+                    // 3 得到回复显示到 <div class="result">代码编译运行的结果</div>中
+                    // 拿到结果标签
+                    let result_div = $(".container .end .result");
+                    //清空上一次运行结果
+                    result_div.empty();
+                    let status = data.status;
+                    let reason = data.reason;
+
+                    let reason_p = $("<p>",{
+                        text:reason
+                    });
+
+                    reason_p.appendTo(result_div);
+                    if(status == 0){
+                        //请求成功，编译运行过程没有问题，结果要看测试用例
+                        let stdout = data.stdout;
+                        let stderr = data.stderr;
+
+                        let stdout_pre = $("<pre>",{
+                            text:stdout
+                        }
+                        );
+
+                        let stderr_pre = $("<pre>",{
+                            text:stderr
+                        }
+                        );
+                        stdout_pre.appendTo(result_div);
+                        stderr_pre.appendTo(result_div);
+                    }
+                    else{
+                        //编译运行出错，不处理
+                    }
+
+                }
+            });
+            
+        }
+    </script>
 
 </body>
 </html>
