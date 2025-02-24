@@ -15,7 +15,7 @@
 
 开发环境：
 
-- Unbunto云服务器
+- Ubuntu云服务器
 - vscode
 
 # 2 项目宏观结构
@@ -896,6 +896,8 @@ int main()
 4 把通过测试用例的个数，返回给客户端，就完成了判题相关功能
 ```
 
+注意：当完成全部功能后，要给编译模块的execl添加 -D条件编译掉测试用例中的头文件
+
 ## model功能
 
 ```c++
@@ -1193,7 +1195,625 @@ bool GetQuestion(const std::string& number,std::string *html)
 
 ## 负载均衡
 
- 
+```c++
+//提供编译运行服务的主机
+struct Machine
+{
+    string ip; //编译服务的ip
+    int port;  //端口号
+    uint64_t load;  //负载情况
+    std::mutex *mtx;//mutex禁止拷贝，如果Machine被放在某个容器里,一定会发生拷贝，使用指针
+    Machine()
+    :ip("")
+    ,port(0)
+    ,load(0)
+    ,mtx(nullptr)
+    {}
+    ~Machine(){}
+    //递增负载
+    void IncreaseLoad()
+    {
+        if(mtx) mtx->lock();
+        ++load;
+        if(mtx) mtx->unlock();
+    }
+    //递减负载
+    void decreaseLoad()
+    {
+        if(mtx) mtx->lock();
+        --load;
+        if(mtx) mtx->unlock();
+    }
+    //获取主机负载
+    uint64_t Load()
+    {
+        uint64_t _load = 0;
+        if(mtx) mtx->lock();
+        _load = load;
+        if(mtx) mtx->unlock();
+        return _load;
+    }
+};
+//负载均衡模块
+const std::string service_machine = "./conf/service_machine.conf";
+class LoadBlance
+{
+private:
+    //每一台主机都有自己的下标，充当当前主机的id
+    std::vector<Machine> machines;//可以给我们提供编译服务的所有主机
+    //所有在线的主机id
+    std::vector<int> online;
+    //所有离线的主机id
+    std::vector<int> offline;
+    // 保证LoadBlance的数据安全
+    std::mutex mtx;
+public:
+    LoadBlance()
+    {
+        //在进行负载均衡之前，所有的主机信息必须先加载进来
+        assert(LoadConf(service_machine));
+        LOG(INFO) << "加载配置文件"+ service_machine +"成功" << endl;
+    }
+    ~LoadBlance() {}
+    //加载配置文件
+    bool LoadConf(const std::string& machine_conf)
+    {
+        std::ifstream in(machine_conf);
+        if(!in.is_open())
+        {
+            //只能查看题目，不能判题
+            LOG(FATAL) << "加载" << machine_conf << "失败" <<"\n";
+            return false;
+        }
+        string line;
+        while(getline(in,line))
+        {
+            vector<string> vs;
+            StringUtil::SpiltString(line,&vs,":");
+            if(vs.size() != 2)
+            {
+                LOG(WARING) << "切分" << line << "失败" << endl;
+                continue;
+            }
+            Machine m;
+            m.ip = vs[0];
+            m.port = atoi(vs[1].c_str());
+            m.load = 0;
+            m.mtx = new mutex();
+            online.push_back(machines.size());
+            machines.push_back(m);
+        }
+        in.close();
+        return true;
+    }
+
+    //根据负载情况选择一台在线主机
+    //id:输出型参数
+    //m:输出型参数 获取主机的地址
+    bool Select(int* id,Machine** m)
+    {
+        //1 使用选择好的主机(更新该主机的负载)
+        //2 后面可能离线该主机
+        mtx.lock();
+        //负载均衡的算法
+        //1 随机数法
+        //2 轮询+hash
+        int online_num = online.size();
+        if(online_num == 0)
+        {
+            mtx.unlock();
+            LOG(FATAL) << "所有的后端编译主机已经离线！！！！" << endl;
+            return false;
+        }
+        //遍历online,找到负载最小的主机
+        *id = online[0];
+        *m = &machines[online[0]];
+        uint64_t min_load = machines[online[0]].load;
+        for(int i = 1; i < online_num; ++i)
+        {
+            uint64_t cur_load = machines[online[i]].Load();
+            if(min_load < cur_load)
+            {
+                min_load = machines[online[i]].Load();
+                *id = online[i];
+                *m = &machines[online[i]];
+            }
+        }
+        mtx.unlock();
+        return true;
+    }
+
+    //id:要离线的主机id
+    void OfflineMachine(int id)
+    {
+        //在online中找到要离线的主机id
+        //将它移除，同时添加到offline中
+        mtx.lock();
+        auto iter = online.begin();
+        while(iter!=online.end())
+        {
+            if(*iter == id)
+            {
+                online.erase(iter);
+                offline.push_back(id);
+                break;
+            }
+            ++iter;
+        }
+        mtx.unlock();
+    }
+    void OnlineMachine()
+    {
+        //当所有主机都离线时，统一上线，后面统一解决
+
+    }
+    void ShowMachines()
+    {
+        mtx.lock();
+        cout << "当前在线主机列表" << endl;
+        for(auto& id : online)
+        {
+            cout << machines[id].ip + ":" + to_string(machines[id].port) << endl;
+        }
+
+        cout << "当前离线主机列表" << endl;
+        for(auto& id : offline)
+        {
+            cout << machines[id].ip + ":" + to_string(machines[id].port) << endl;
+        }
+        cout << endl;
+        mtx.unlock();
+    }
+};
+```
+
+# 6 前端页面设计
+
+## 首页
+
+```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人OJ系统首页</title>
+    <style>
+        /* 100%保证我们的样式设置可以不受默认影响 */
+        *{
+            /* 消除网页的默认外边距 */
+            margin:0px;
+            /* 消除网页的默认内边距 */
+            padding:0px;
+        }
+        html,
+        body{
+            width:100%;
+            height:100%;
+        }
+        .contenter .navbar{
+            width:100%;
+            height:50px;
+            background-color: black;
+            /* 给父级标签设置overflow,取消后续浮动带来的影响 */
+            overflow: hidden;
+        }
+        .contenter .navbar a{
+            /* 设置a标签是行内块元素，允许设置宽度 */
+            display: inline-block;
+            /* a标签默认是行内元素，无法设置宽度*/
+            width: 80px;
+            color: white;
+            font-size: large;
+            text-decoration: none;
+            text-align: center;
+            /* 设置文字的高度和导航栏一样高，使它上下居中 */
+            line-height: 50px;
+        }
+        /* 设置鼠标事件 */
+        .contenter .navbar a:hover{
+            background-color: red;
+        }
+
+        .contenter .navbar .login{
+            float: right;
+        }
+
+        .contenter .content{
+            width:800px;
+            /* background-color: #ccc; */
+            /* 设置盒子整体居中 */
+            margin:0 auto; 
+            /* 设置标签中的文字在当前盒子里居中 */
+            text-align: center;
+            /* 设置上外边距 */
+            margin-top: 250px;
+        }
+        
+        .contenter .content .font{
+            /* 全部设置为块级元素,独占一行，可以设置高度宽度 */
+            display: block; 
+            /* 设置每个文字的上外边距 */
+            margin-top:20px;
+            /* 去掉下划线 */
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="contenter">
+        <!-- 导航栏 -->
+        <div class="navbar">
+            <a href="#">首页</a>
+            <a href="/all_questions">题库</a>
+            <a href="#">竞赛</a>
+            <a class="login" href="#">登录</a>
+        </div>
+        <!-- 网页内容 -->
+        <div class="content">
+            <h1 class="font">负载均衡式的OnlineJudge平台</h1>
+            <a class="font" href="/all_questions">跳转获取所有题目</a>
+        </div>
+    </div>
+</body>
+</html>
+```
+
+## 题目列表
+
+```
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在线OJ-题目列表</title>
+    <style>
+        /* 100%保证我们的样式设置可以不受默认影响 */
+        *{
+            /* 消除网页的默认外边距 */
+            margin:0px;
+            /* 消除网页的默认内边距 */
+            padding:0px;
+        }
+        html,
+        body{
+            width:100%;
+            height:100%;
+        }
+        .container .navbar{
+            width:100%;
+            height:50px;
+            background-color: black;
+            /* 给父级标签设置overflow,取消后续浮动带来的影响 */
+            overflow: hidden;
+        }
+        .container .navbar a{
+            /* 设置a标签是行内块元素，允许设置宽度 */
+            display: inline-block;
+            /* a标签默认是行内元素，无法设置宽度*/
+            width: 80px;
+            color: white;
+            font-size: large;
+            text-decoration: none;
+            text-align: center;
+            /* 设置文字的高度和导航栏一样高，使它上下居中 */
+            line-height: 50px;
+        }
+        /* 设置鼠标事件 */
+        .container .navbar a:hover{
+            background-color: red;
+        }
+
+        .container .navbar .login{
+            float: right;
+        }
+
+        .container .question_list{
+            width:1000px;
+            height:100%;
+            margin:0px auto;
+            margin-top:20px;
+            /* background-color: #ccc; */
+            text-align: center;
+        }
+        .container .question_list h2{
+            color:aqua;
+        }
+
+        .container .question_list table{
+            width:100%;
+            font-size: large;
+            margin-top:20px;
+            background-color: rgb(234, 238, 224);
+        }
+        .container .question_list table .item{
+            width:100px;
+            height:40px;
+            font-size: large;
+        }
+        .container .question_list table .item a{
+            text-decoration: none;
+            color: black;
+        }
+        .container .question_list table .item a:hover{
+            color:blue;
+            text-decoration: underline;
+        }
+        .container .footer{
+            width: 100%;
+            height:30px;
+            text-align: center;
+            line-height: 30px;
+            color:#ccc;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class = "container">
+        <!-- 导航栏 -->
+        <div class="navbar">
+            <a href="/">首页</a>
+            <a href="/all_questions">题库</a>
+            <a href="#">竞赛</a>
+            <a class="login" href="#">登录</a>
+        </div>
+        <div class="question_list">
+            <h2>OnlineJudge题目列表</h2>
+            <table>
+                <tr>
+                    <th class="item">编号</th>
+                    <th class="item">标题</th>
+                    <th class="item">难度</th>
+                </tr>
+                <!-- 在question_list之间，要循环形成多个内容 -->
+                {{#question_list}}
+                <tr>
+                    <td class="item">{{number}}</td>
+                    <td class="item"><a href="/question/{{number}}">{{title}}</a></td>
+                    <td class="item">{{star}}</td>
+                </tr>
+                {{/question_list}}
+            </table>
+        </div>
+        <div class="footer">
+            <h4>@lyh PeaDream@outlook.com</h4>
+        </div>
+    </div>
+    
+</body>
+</html>
+```
+
+## 指定题目的编写页面
+
+### Ace在线编辑器
+
+```
+<!--引入ace cdn的插件--> <!--cdn是用来网络加速的-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js" type="text/javascript" charset="UTF-8"></script>
+<!--语言工具-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ext-language_tools.js" type="text/javascript" charset="UTF-8"></script>
+
+<script>
+    editor = ace.edit("code");
+    //设置风格和语言
+    editor.setTheme("ace/theme/monokai");
+    editor.session.setMode("ace/mode/c_cpp");
+
+    //字体大小
+    editor.setFontSize(16);
+    //设置默认制表符的大小
+    editor.getSession().setTabSize(4);
+
+    //设置只读
+    editor.setReadOnly(false);
+    
+    editor.setShowPrintMargin(false);
+
+    //启用提示菜单
+    ace.require("ace/ext/language_tools");
+    editor.setOptions(
+        {
+            enableBasicAutocompletion:true,
+            enableSnippets:true,
+            enableLiveAutocompletion:true
+        }
+    );
+</script>
+```
+
+### 结构
+
+```
+<div class="container">
+    <!-- 导航栏 -->
+    <div class="navbar">
+        <a href="/">首页</a>
+        <a href="/all_questions">题库</a>
+        <a href="#">竞赛</a>
+        <a class="login" href="#">登录</a>
+    </div>
+
+    <!-- 左右呈现： 题目描述  预制代码 -->
+    <div class = "middle">
+        <div class="left">
+            <h3>{{number}}.{{title}} {{star}}</h3>
+            <pre>{{desc}}</pre>
+        </div>
+        <div class="right">
+            <!-- ace需要的标签 -->
+            <pre id="code" class="ace_editor"><textarea class="ace_text-input">{{header}}</textarea></pre>
+        </div>
+    </div>
+
+    <!-- 提交且得到结果 -->
+    <div class="end">
+        <div class="result">代码编译运行的结果</div>
+        <button class="bt" onclick="submit()">运行代码</button>
+    </div>
+</div>
+```
+
+### css样式
+
+```
+<style>
+    /* 100%保证我们的样式设置可以不受默认影响 */
+    *{
+        /* 消除网页的默认外边距 */
+        margin:0px;
+        /* 消除网页的默认内边距 */
+        padding:0px;
+    }
+    html,
+    body{
+        width:100%;
+        height:100%;
+    }
+
+    .container .navbar{
+        width:100%;
+        height:50px;
+        background-color: black;
+        /* 给父级标签设置overflow,取消后续浮动带来的影响 */
+        overflow: hidden;
+    }
+    .container .navbar a{
+        /* 设置a标签是行内块元素，允许设置宽度 */
+        display: inline-block;
+        /* a标签默认是行内元素，无法设置宽度*/
+        width: 80px;
+        color: white;
+        font-size: large;
+        text-decoration: none;
+        text-align: center;
+        /* 设置文字的高度和导航栏一样高，使它上下居中 */
+        line-height: 50px;
+    }
+    /* 设置鼠标事件 */
+    .container .navbar a:hover{
+        background-color: red;
+    }
+
+    .container .navbar .login{
+        float: right;
+    }
+
+
+    .container .middle{
+        overflow: hidden;
+        width:100%;
+        height:800px;
+    }
+    .container .middle .left{
+        width: 40%;
+        height:800px;
+        float: left;
+        /* 添加滚动条 */
+        /* overflow: scroll; */
+        overflow:auto;
+    }
+    .container .middle .left h3{
+        margin-top:10px;
+        margin-left:10px;
+    }
+    .container .middle .left pre{
+        margin-top:10px;
+        margin-left:10px;
+        font-size:medium;
+    }
+
+    .container .middle .right{
+        width: 60%;
+        float: right;
+    }
+    .container .middle .right .ace_editor{
+        height: 800px;
+    }
+
+
+    .container .end{
+        overflow: hidden;
+        width:100%;
+    }
+    .container .end .result{
+        width:300px;
+        float: left;
+        margin-top:5px;
+        margin-right:5px;
+    }
+    .container .end .bt{
+        width:100px;
+        height:50px;
+        font-size: large;
+        float: right;
+        background-color: #26bb9c;
+        color:white;
+        border:0px;
+        margin-top: 10px;
+        margin-right: 10px;
+    }
+    .container .end .bt:hover{
+        color:red;
+    }
+</style>
+```
+
+# 7 提交代码的前后端交互
+
+## 整体思路
+
+```
+<!--引入JQuery cdn-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" type="text/javascript" charset="UTF-8"></script>
+function submit()
+{
+    alert("提交代码");
+    //采用JQuery
+    // 1 收集要提交的数据：代码、题号、input
+    
+    // 2 构建json,并向后台发起请求
+    
+    // 3 得到回复显示到 <div class="result">代码编译运行的结果</div>中
+}
+```
+
+## 收集页面代码和题号
+
+```
+// 1 收集要提交的数据：代码、题号
+let code = editor.getSession().getValue();
+// $就是个JQuery对象，传入选择器 选择 对应的标签，来获取对应标签的信息
+let number = $(".container .middle .left h3 #number").text();
+//console.log(code);
+//console.log(number);
+//形成url
+let url = "/judge/" + number;
+```
+
+## 通过ajax发起请求
+
+```
+// 2 构建json,用ajax向后台发起基于http的json请求
+$.ajax({
+    method:'Post', // 请求方式
+    url:url,  //指定url
+    dataType:'json', //告诉服务器，需要响应给客户端json数据
+    contentType:"application/json;charset=utf-8",//告诉服务器，发送的数据是什么格式
+    data: JSON.stringify({
+        'code':code,
+        'input':''
+    }),
+    success: function(data){
+        //成功获得响应
+        console.log(data);
+    }
+});
+```
+
+![image-20250224213932607](assets/image-20250224213932607.png)
 
 
 
