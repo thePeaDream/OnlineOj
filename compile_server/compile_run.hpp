@@ -45,7 +45,7 @@ namespace ns_compile_and_run
                 desc = "浮点数溢出/除0错误";
                 break;
             default:
-                desc = "收到信号：" + std::to_string(code);
+                desc = "其他错误：" + std::to_string(code);
                 break;
             }
             return desc;
@@ -142,51 +142,6 @@ namespace ns_compile_and_run
 
             //把结果全部拿到以后，清理所有相关临时文件
             FileUtil::RemoveTempFile(file_name);
-
-
-            // if(code.size() == 0)
-            // {
-            //     out_value["status"] = -1;//代码为空
-            //     out_value["reason"] = "用户代码为空";
-            //     //序列化
-            //     return;
-            // }
-            // //1 生成唯一文件名，形成的文件名只具有唯一性，没有目录，没有后缀
-            // //用毫秒级时间戳+原子性递增唯一值，保证唯一性
-            // std::string file_name = FileUtil::UniqFileName();
-
-            // //2 把用户代码写到该文件中,形成临时src文件
-            // if(!FileUtil::WriteFile(PathUtil::Src(file_name),code))
-            // {
-            //     out_value["status"] = -2;//未知错误
-            //     out_value["reason"] = "发生未知错误";
-            //     //序列化
-            //     return;
-            // }
-
-            // if(!Compiler::Compile(file_name))
-            // {
-            //     //编译失败
-            //     out_value["status"] = -3;//代码编译时发生错误
-            //     out_value["reason"] = FileUtil::ReadFile(PathUtil::CompilerError(file_name));
-            //     //读取 编译失败生成的临时文件.compile_error，将具体编译错误返回
-            //     return;
-            // }
-
-            // int retCode = Runner::Run(file_name,cpu_limit,mem_limit);
-            // if(retCode < 0 )
-            // {
-            //     out_value["status"] = -2;//未知错误 服务器
-            //     out_value["reason"] = "发生未知错误";
-            //     //序列化
-            //     return;
-            // }
-            // else if(retCode > 0)//用户代码出问题，运行时报错
-            // {
-            //     out_value["status"] = retCode;//运行时报错
-            //     out_value["reason"] = SignalDesc(retCode);//将信号转换成报错原因
-            // }
         }
-
     };
 }

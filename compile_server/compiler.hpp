@@ -58,7 +58,6 @@ namespace ns_compiler
                     LOG(INFO) << PathUtil::Src(file_name)<<"编译成功"<<"\n";
                     return true;
                 }
-                LOG(INFO) << PathUtil::Src(file_name)<<"\n";
                 LOG(INFO) << "编译失败,没有形成可执行程序"<<"\n";
                 return false;
             }

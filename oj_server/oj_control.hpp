@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include "../comm/util.hpp"
 #include "../comm/log.hpp"
 #include "../comm/httplib.h"
@@ -10,6 +11,7 @@
 #include <jsoncpp/json/json.h>
 #include <mutex>
 #include <fstream>
+#include <assert.h>
 
 namespace ns_control
 {
@@ -55,6 +57,12 @@ namespace ns_control
             _load = load;
             if(mtx) mtx->unlock();
             return _load;
+        }
+        void ResetLoad()
+        {
+            if(mtx) mtx->lock();
+            load = 0;
+            if(mtx) mtx->unlock();
         }
     };
     //负载均衡模块
@@ -119,8 +127,7 @@ namespace ns_control
             //2 后面可能离线该主机
             mtx.lock();
             //负载均衡的算法
-            //1 随机数法
-            //2 轮询+hash
+            // 轮询+hash
             int online_num = online.size();
             if(online_num == 0)
             {
@@ -131,13 +138,13 @@ namespace ns_control
             //遍历online,找到负载最小的主机
             *id = online[0];
             *m = &machines[online[0]];
-            uint64_t min_load = machines[online[0]].load;
+            uint64_t min_load = machines[online[0]].Load();
             for(int i = 1; i < online_num; ++i)
             {
                 uint64_t cur_load = machines[online[i]].Load();
-                if(min_load < cur_load)
+                if(min_load > cur_load)
                 {
-                    min_load = machines[online[i]].Load();
+                    min_load = cur_load;
                     *id = online[i];
                     *m = &machines[online[i]];
                 }
@@ -153,10 +160,11 @@ namespace ns_control
             //将它移除，同时添加到offline中
             mtx.lock();
             auto iter = online.begin();
-            while(iter!=online.end())
+            while(iter!=online.end()) 
             {
                 if(*iter == id)
                 {
+                    machines[id].ResetLoad();
                     online.erase(iter);
                     offline.push_back(id);
                     break;
@@ -167,9 +175,15 @@ namespace ns_control
         }
         void OnlineMachine()
         {
-            //当所有主机都离线时，统一上线，后面统一解决
+            //当所有主机都离线时，统一上线
+            mtx.lock();
+            online.insert(online.end(),offline.begin(),offline.end());
+            offline.erase(offline.begin(),offline.end());
+            mtx.unlock();
 
+            LOG(INFO) << "所有主机重新上线" << endl;
         }
+
         void ShowMachines()
         {
             mtx.lock();
@@ -195,12 +209,15 @@ namespace ns_control
     public:
         Control(){}
         ~Control(){}
-        bool GetAllQuestions(std::string* html)//获取所有题目数据，构建成一个网页,写到html中
+        bool GetAllQuestions(string* html)//获取所有题目数据，构建成一个网页,写到html中
         {
             bool flag = true;
             vector<Question> all;
             if(_model.GetAllQuestion(&all))
             {
+                sort(all.begin(),all.end(),[](const Question& q1,const Question& q2){
+                    return atoi(q1.number.c_str()) < atoi(q2.number.c_str());// < 是升序排序
+                });
                 //获取题目信息成功，用View将所有的题目数据构建成网页
                 _view.AllQuestionHtml(all,html);
             }
@@ -244,7 +261,7 @@ namespace ns_control
             //3 根据题号拼接用户代码+测试用例代码
             Json::Value compile_value;
             compile_value["input"] = in_value["input"].asString();
-            compile_value["code"] = code + q.tailer;
+            compile_value["code"] = code +"\n" + q.tailer;
             compile_value["cpu_limit"] = q.cpu_limit;
             compile_value["mem_limit"] = q.mem_limit;
             // 将要发送给主机的内容序列化成字符串
@@ -263,11 +280,15 @@ namespace ns_control
                     //所有主机都挂掉了
                     break;
                 }
-                LOG(INFO) << "选择主机成功，主机id:" << id << "详情：" << m->ip << ":" << m->port << endl; 
+                
                 //5 发起http请求，得到结果
                 httplib::Client cli(m->ip,m->port);
+                // cli.set_read_timeout(30, 0); // 设置读取超时为30秒
+                // cli.set_write_timeout(30, 0); // 设置写入超时为5秒
                 m->IncreaseLoad();//开始请求之前，增加负载
-                if(auto res = cli.Post("/compile_and_run",compile_json,"application/json"))
+                LOG(INFO) << "选择主机id:" << id << "详情：" << m->ip << ":" << m->port << endl; 
+                LOG(INFO) << "当前主机负载情况："<< m->Load() << endl;
+                if(auto res = cli.Post("/compile_and_run",compile_json,"application/json;charset=utf-8"))
                 {
                     //6 只要是正常获取编译结果，将结果交给 *out_json
                     //否则重新选择主机 
@@ -287,11 +308,13 @@ namespace ns_control
                     LOG(ERROR)<<"当前请求的主机id:" << id <<"详情："<<m->ip << ":" << m->port << "可能离线了" << endl;
                     //离线会把负载清0的
                     load_blance.OfflineMachine(id);
-                    load_blance.ShowMachines();//调试
+                    //load_blance.ShowMachines();//调试
                 }
             }
-            
-            
+        }
+        void RecoveryMachine()
+        {
+            load_blance.OnlineMachine();
         }
     private:
         //要有对数据的操作对象才能逻辑控制

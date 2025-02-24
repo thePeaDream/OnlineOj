@@ -14,7 +14,7 @@ namespace ns_log
         ERROR,//当前用户的请求发生错误 3
         FATAL//系统级错误 4
     };
-    //LOG(INFO) << "message" << endl
+
     inline static std::ostream& Log(const std::string &level,const std::string& fileName,int line)
     {
         //添加日志等级

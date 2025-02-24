@@ -67,7 +67,9 @@ namespace ns_model
                 q.star = vs[2];
                 q.cpu_limit =atoi(vs[3].c_str());
                 q.mem_limit =atoi(vs[4].c_str());
-                string path = question_path + q.number + "/";
+                string path = question_path;
+                path += q.number;
+                path += "/";
                 string desc = path + "desc.txt";
                 string hander = path + "hander.cpp";
                 string tailer = path+ "tail.cpp";

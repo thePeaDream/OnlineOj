@@ -25,22 +25,6 @@ namespace ns_runner{
         //mem_limit:该程序运行时，可以使用的最大内存大小(KB)
         static int Run(const std::string&file_name, int cpu_limit,int mem_limit)
         {
-            /*
-            程序运行：
-            1 代码跑完，结果 正确/不正确
-            2 代码没跑完，中途收到信号退出
-            */
-           /*
-                Run只需要考虑是否运行完毕
-                结果正确与否，是由测试用例决定
-           */
-
-            /*
-            一个程序在默认启动时：
-            标准输入：不处理
-            标准输出：程序运行完成，输出的内容
-            标准错误：运行时错误信息
-            */
             umask(0);
             int stdin_fd = open(PathUtil::Stdin(file_name).c_str(),O_CREAT|O_RDONLY,0644);
             int stdout_fd = open(PathUtil::Stdout(file_name).c_str(),O_CREAT|O_WRONLY,0644);

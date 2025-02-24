@@ -1,14 +1,24 @@
 #include <iostream>
+#include <signal.h>
 #include "../comm/httplib.h"
 #include "oj_control.hpp"
 using namespace httplib;
 using namespace ns_control;
+static Control *p_ctrl = nullptr;
+
+void Recovery(int signo)
+{
+    p_ctrl->RecoveryMachine();
+}
 //获取用户的http请求，通过control来完成对路由功能的解耦
 int main()
 {
+    //收到2号信号ctrl+c后就重新上线所有主机
+    signal(SIGINT,Recovery);
     //访问特定资源的功能路由
     Server svr;
     Control ctrl;
+    p_ctrl = &ctrl;
     //1 获取所有的题目列表
     svr.Get("/all_questions",[&ctrl](const Request&req,Response& resp){
         //返回一张包含有所有题目的html网页
