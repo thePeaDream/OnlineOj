@@ -4,8 +4,8 @@
 #include "oj_control.hpp"
 using namespace httplib;
 using namespace ns_control;
-static Control *p_ctrl = nullptr;
 
+static Control *p_ctrl = nullptr;
 void Recovery(int signo)
 {
     p_ctrl->RecoveryMachine();

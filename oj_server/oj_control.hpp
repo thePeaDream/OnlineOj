@@ -283,8 +283,7 @@ namespace ns_control
                 
                 //5 发起http请求，得到结果
                 httplib::Client cli(m->ip,m->port);
-                // cli.set_read_timeout(30, 0); // 设置读取超时为30秒
-                // cli.set_write_timeout(30, 0); // 设置写入超时为5秒
+
                 m->IncreaseLoad();//开始请求之前，增加负载
                 LOG(INFO) << "选择主机id:" << id << "详情：" << m->ip << ":" << m->port << endl; 
                 LOG(INFO) << "当前主机负载情况："<< m->Load() << endl;
