@@ -4,10 +4,12 @@
 #include <vector>
 #include "../comm/util.hpp"
 #include "../comm/log.hpp"
+#include "../comm/httplib.h"
 #include "oj_model.hpp"
 #include "oj_view.hpp"
 #include <jsoncpp/json/json.h>
 #include <mutex>
+#include <fstream>
 
 namespace ns_control
 {
@@ -31,8 +33,32 @@ namespace ns_control
         ,mtx(nullptr)
         {}
         ~Machine(){}
+        //递增负载
+        void IncreaseLoad()
+        {
+            if(mtx) mtx->lock();
+            ++load;
+            if(mtx) mtx->unlock();
+        }
+        //递减负载
+        void decreaseLoad()
+        {
+            if(mtx) mtx->lock();
+            --load;
+            if(mtx) mtx->unlock();
+        }
+        //获取主机负载
+        uint64_t Load()
+        {
+            uint64_t _load = 0;
+            if(mtx) mtx->lock();
+            _load = load;
+            if(mtx) mtx->unlock();
+            return _load;
+        }
     };
     //负载均衡模块
+    const std::string service_machine = "./conf/service_machine.conf";
     class LoadBlance
     {
     private:
@@ -42,9 +68,126 @@ namespace ns_control
         std::vector<int> online;
         //所有离线的主机id
         std::vector<int> offline;
+        // 保证LoadBlance的数据安全
+        std::mutex mtx;
+    public:
+        LoadBlance()
+        {
+            //在进行负载均衡之前，所有的主机信息必须先加载进来
+            assert(LoadConf(service_machine));
+            LOG(INFO) << "加载配置文件"+ service_machine +"成功" << endl;
+        }
+        ~LoadBlance() {}
+        //加载配置文件
+        bool LoadConf(const std::string& machine_conf)
+        {
+            std::ifstream in(machine_conf);
+            if(!in.is_open())
+            {
+                //只能查看题目，不能判题
+                LOG(FATAL) << "加载" << machine_conf << "失败" <<"\n";
+                return false;
+            }
+            string line;
+            while(getline(in,line))
+            {
+                vector<string> vs;
+                StringUtil::SpiltString(line,&vs,":");
+                if(vs.size() != 2)
+                {
+                    LOG(WARING) << "切分" << line << "失败" << endl;
+                    continue;
+                }
+                Machine m;
+                m.ip = vs[0];
+                m.port = atoi(vs[1].c_str());
+                m.load = 0;
+                m.mtx = new mutex();
+                online.push_back(machines.size());
+                machines.push_back(m);
+            }
+            in.close();
+            return true;
+        }
+
+        //根据负载情况选择一台在线主机
+        //id:输出型参数
+        //m:输出型参数 获取主机的地址
+        bool Select(int* id,Machine** m)
+        {
+            //1 使用选择好的主机(更新该主机的负载)
+            //2 后面可能离线该主机
+            mtx.lock();
+            //负载均衡的算法
+            //1 随机数法
+            //2 轮询+hash
+            int online_num = online.size();
+            if(online_num == 0)
+            {
+                mtx.unlock();
+                LOG(FATAL) << "所有的后端编译主机已经离线！！！！" << endl;
+                return false;
+            }
+            //遍历online,找到负载最小的主机
+            *id = online[0];
+            *m = &machines[online[0]];
+            uint64_t min_load = machines[online[0]].load;
+            for(int i = 1; i < online_num; ++i)
+            {
+                uint64_t cur_load = machines[online[i]].Load();
+                if(min_load < cur_load)
+                {
+                    min_load = machines[online[i]].Load();
+                    *id = online[i];
+                    *m = &machines[online[i]];
+                }
+            }
+            mtx.unlock();
+            return true;
+        }
+
+        //id:要离线的主机id
+        void OfflineMachine(int id)
+        {
+            //在online中找到要离线的主机id
+            //将它移除，同时添加到offline中
+            mtx.lock();
+            auto iter = online.begin();
+            while(iter!=online.end())
+            {
+                if(*iter == id)
+                {
+                    online.erase(iter);
+                    offline.push_back(id);
+                    break;
+                }
+                ++iter;
+            }
+            mtx.unlock();
+        }
+        void OnlineMachine()
+        {
+            //当所有主机都离线时，统一上线，后面统一解决
+
+        }
+        void ShowMachines()
+        {
+            mtx.lock();
+            cout << "当前在线主机列表" << endl;
+            for(auto& id : online)
+            {
+                cout << machines[id].ip + ":" + to_string(machines[id].port) << endl;
+            }
+
+            cout << "当前离线主机列表" << endl;
+            for(auto& id : offline)
+            {
+                cout << machines[id].ip + ":" + to_string(machines[id].port) << endl;
+            }
+            cout << endl;
+            mtx.unlock();
+        }
     };
-
-
 
     //核心业务逻辑控制器
     class Control
@@ -88,18 +231,73 @@ namespace ns_control
         //id:100
         //code:""
         //input:""
-        void Judge(const std::string in_json,std::string* out_json)
+        void Judge(const string& number, const string in_json,string* out_json)
         {
-            //1 反序列化in_json,得到题目id、用户源代码、input
-            //2 拼接用户代码+测试用例代码
-            //3 选择负载最低的主机
-            //4 发起http请求，得到结果
-            //5 将结果交给 *out_json 
+            //1 根据题号，得到题目详情
+            Question q;
+            _model.GetOneQuestion(number,&q);
+            //2 反序列化in_json,得到用户源代码、input
+            Json::Reader reader;
+            Json::Value in_value;
+            reader.parse(in_json,in_value);
+            string code = in_value["code"].asString();
+            //3 根据题号拼接用户代码+测试用例代码
+            Json::Value compile_value;
+            compile_value["input"] = in_value["input"].asString();
+            compile_value["code"] = code + q.tailer;
+            compile_value["cpu_limit"] = q.cpu_limit;
+            compile_value["mem_limit"] = q.mem_limit;
+            // 将要发送给主机的内容序列化成字符串
+            Json::StreamWriterBuilder writer;
+            writer.settings_["emitUTF8"] = true;
+            string compile_json = Json::writeString(writer,compile_value);
+            //4 选择负载最低的主机
+            //规则：一直选择，直到主机可用；
+            //特殊：全部主机都无法使用
+            while(true)
+            {
+                int id = 0;
+                Machine *m = nullptr;
+                if(!load_blance.Select(&id,&m))
+                {
+                    //所有主机都挂掉了
+                    break;
+                }
+                LOG(INFO) << "选择主机成功，主机id:" << id << "详情：" << m->ip << ":" << m->port << endl; 
+                //5 发起http请求，得到结果
+                httplib::Client cli(m->ip,m->port);
+                m->IncreaseLoad();//开始请求之前，增加负载
+                if(auto res = cli.Post("/compile_and_run",compile_json,"application/json"))
+                {
+                    //6 只要是正常获取编译结果，将结果交给 *out_json
+                    //否则重新选择主机 
+                    if(res->status == 200)
+                    {
+                        *out_json = res->body;
+                        m->decreaseLoad();//请求完毕，减少负载
+                        LOG(INFO) << "请求编译和运行服务成功........" <<endl;
+                        break;
+                    }
+                    else
+                        m->decreaseLoad();//请求完毕,但状态码不是200，仍然需要减少负载
+                }
+                else
+                {
+                    //请求失败，当前请求的主机可能离线，去选别的主机
+                    LOG(ERROR)<<"当前请求的主机id:" << id <<"详情："<<m->ip << ":" << m->port << "可能离线了" << endl;
+                    //离线会把负载清0的
+                    load_blance.OfflineMachine(id);
+                    load_blance.ShowMachines();//调试
+                }
+            }
+            
+            
         }
     private:
         //要有对数据的操作对象才能逻辑控制
         Model _model;
         //视图用于网页的数据渲染
         View _view;
+        LoadBlance load_blance;//核心负载均衡器
     };
 }

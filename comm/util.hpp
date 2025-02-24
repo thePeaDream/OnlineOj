@@ -8,6 +8,7 @@
 #include <sys/time.h>
 #include <fstream>
 #include <boost/algorithm/string.hpp>
+#include <vector>
 
 namespace ns_util
 {

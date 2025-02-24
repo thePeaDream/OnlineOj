@@ -31,9 +31,12 @@ int main()
     });
 
     //3 用户提交代码，使用我们的判题功能(1 每道题的测试用例 2 compile_and_run)
-    svr.Get(R"(/judge/(\d+))",[](const Request& req,Response& resp){
+    svr.Post(R"(/judge/(\d+))",[&ctrl](const Request& req,Response& resp){
         std::string number = req.matches[1];
-        resp.set_content("这是指定题目的判题："+number,"text/plain;charset=utf-8");
+        string out_json;
+        ctrl.Judge(number,req.body,&out_json);
+        resp.set_content(out_json,"application/json;charset=utf-8");
+        //resp.set_content("这是指定题目的判题："+number,"text/plain;charset=utf-8");
     }); 
     svr.set_base_dir("./wwwroot");
     svr.listen("0.0.0.0",8080);
